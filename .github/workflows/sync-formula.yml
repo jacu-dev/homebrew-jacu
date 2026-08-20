@@ -63,6 +63,27 @@ jobs:
             echo "pull request already open for $branch"
             exit 0
           fi
-          gh pr create --base main --head "$branch" \
+          # The organization forbids Actions from creating pull requests, and the
+          # same setting also grants approving them — not worth enabling org-wide
+          # for one click per release. The branch above is the whole payload, so
+          # the job succeeds and hands over the link instead of failing on a
+          # permission it should not have.
+          if gh pr create --base main --head "$branch" \
             --title "chore: sync jacu formula v${version}" \
-            --body "Downloads \`jacu.rb\` from the published jacu-harness release, verifies it against the signed checksums, and waits for owner review. This workflow must not push \`main\`."
+            --body "Downloads \`jacu.rb\` from the published jacu-harness release, verifies it against the signed checksums, and waits for owner review. This workflow must not push \`main\`." 2>/tmp/pr-create.log; then
+            exit 0
+          fi
+          if grep -q 'not permitted to create or approve pull requests' /tmp/pr-create.log; then
+            {
+              echo "### Formula synced to v${version}"
+              echo
+              echo "Branch \`${branch}\` is pushed and verified against the signed checksums."
+              echo "Actions cannot open pull requests in this organization, so open it here:"
+              echo
+              echo "https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "branch pushed; open the pull request from the run summary link"
+            exit 0
+          fi
+          cat /tmp/pr-create.log >&2
+          exit 1
