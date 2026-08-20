@@ -3,10 +3,12 @@ name: Sync formula
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 6 * * *"
 
+# Never push main. Open a PR; the ruleset requires owner review.
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: sync-formula
@@ -14,11 +16,15 @@ concurrency:
 
 jobs:
   sync:
+    if: github.repository == 'jacu-dev/homebrew-jacu'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Download jacu.rb from the latest published release
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - name: Fetch and verify the published formula
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -26,15 +32,28 @@ jobs:
           mkdir -p Formula
           gh release download --repo jacu-dev/jacu-harness --pattern 'jacu.rb' --dir Formula --clobber
           test -f Formula/jacu.rb
-      - name: Commit if the formula changed
+          bash scripts/verify-formula.sh
+      - name: Open a pull request when the formula changed
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          version="$(sed -n 's/^  version "\([^\"]*\)"/\1/p' Formula/jacu.rb | head -n 1)"
+          branch="sync/jacu-v${version}"
           git add Formula/jacu.rb
           if git diff --cached --quiet; then
             echo "formula unchanged"
             exit 0
           fi
-          git commit -m "chore: sync jacu formula from latest release"
-          git push
+          git checkout -B "$branch"
+          git commit -m "chore: sync jacu formula v${version} from signed release"
+          git push -u origin "$branch"
+          if gh pr view "$branch" --json url >/dev/null 2>&1; then
+            echo "pull request already open for $branch"
+            exit 0
+          fi
+          gh pr create --base main --head "$branch" \
+            --title "chore: sync jacu formula v${version}" \
+            --body "Downloads \`jacu.rb\` from the published jacu-harness release, verifies it against the signed checksums, and waits for owner review. This workflow must not push \`main\`."
