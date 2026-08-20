@@ -20,9 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Credentials are persisted so the sync step can push its branch. They were
+      # disabled, which left `git push` with no way to authenticate: the run
+      # created the commit and then died with "could not read Username". The
+      # concern behind disabling them — a token pushing `main` — is handled by
+      # the main-tap-protect ruleset instead, which requires a pull request and
+      # status checks on the default branch. This token can only create sync/*
+      # branches, which is exactly what the job needs.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          persist-credentials: true
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v3.1.3
