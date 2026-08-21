@@ -5,7 +5,20 @@ on:
   schedule:
     - cron: "17 6 * * *"
 
-# Never push main. Open a PR; the ruleset requires owner review.
+# Never push main: open a pull request instead.
+#
+# The pull request is NOT reviewed by a human, and this comment used to claim
+# it was. Measured 2026-08-21: `main-tap-protect` has
+# `required_approving_review_count: 0` and `require_code_owner_review: false`.
+# On a Team plan with a single org member that is not fixable by turning the
+# flag on - with 0 approvals the code-owner rule is a no-op, and with 1 it
+# deadlocks, because nobody can approve their own pull request.
+#
+# So what actually holds this back is that auto-merge is NOT armed here: the
+# formula pull request sits open until someone merges it. That is a weaker
+# guarantee than a review, and it is the true one. Do not arm auto-merge on
+# this workflow's pull request without replacing the guarantee first - the
+# formula it writes is what installs a binary on a user's machine.
 permissions:
   contents: write
   pull-requests: write
